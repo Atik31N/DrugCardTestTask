@@ -33,3 +33,7 @@ This command runs the parser, which collects data from the site and saves it to 
 https://localhost/api/products
 ```
 Returns a list of products and their count in JSON format.
+
+## Catalog that contains .csv files
+```
+/app/var/data
