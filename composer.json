@@ -63,7 +63,7 @@
         "post-install-cmd": [
             "php bin/console doctrine:database:create --if-not-exists",
             "php bin/console doctrine:migrations:migrate --no-interaction",
-            "php bin/console messenger:consume --sleep=30",
+            "nohup php bin/console messenger:consume --sleep=30",
             "@auto-scripts"
         ],
         "post-update-cmd": [
