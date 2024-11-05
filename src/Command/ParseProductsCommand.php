@@ -26,6 +26,12 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 )]
 class ParseProductsCommand extends Command
 {
+    const array URLS = [
+        'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki',
+        'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki/?page=2',
+        'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki/?page=3'
+    ];
+
     private HttpClientInterface $client;
     private MessageBusInterface $messageBus;
     private ProductService $productService;
@@ -33,10 +39,10 @@ class ParseProductsCommand extends Command
     private ProductMapperHelper $productMapperHelper;
 
     public function __construct(
-        HttpClientInterface    $client,
-        MessageBusInterface    $messageBus,
-        ProductService         $productService,
-        ProductMapperHelper    $productMapperHelper
+        HttpClientInterface $client,
+        MessageBusInterface $messageBus,
+        ProductService      $productService,
+        ProductMapperHelper $productMapperHelper
     )
     {
         parent::__construct();
@@ -62,16 +68,12 @@ class ParseProductsCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $urls = [
-            'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki',
-            'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki/?page=2',
-            'https://topcompany.com.ua/ryukzaki-i-sumki/shkolnyye-ryukzaki/?page=3'
-        ];
+        $urls = self::URLS;
 
-        $products = [];
         $iterationID = time();
 
         foreach ($urls as $url) {
+            $products = [];
             $io->info("Loading page: $url");
             $response = $this->client->request('GET', $url);
 
@@ -93,21 +95,33 @@ class ParseProductsCommand extends Command
             $skus = $xpath->query('//div[@class="model-info"]/text()[2]');
 
             foreach ($titles as $i => $titleNode) {
-                $productData = [
-                    'title' => $this->productMapperHelper->titleFormat($titleNode->nodeValue),
-                    'price' => $this->productMapperHelper->priceFormat($prices->item($i)->nodeValue ?? '0'),
-                    'image_url' => $this->productMapperHelper->imgUrlFormat($images->item($i)->getAttribute('src') ?? ''),
-                    'product_url' => $this->productMapperHelper->productUrlFormat($links->item($i)->nodeValue ?? ''),
-                    'sku' => $this->productMapperHelper->skuFormat($skus->item($i)->nodeValue ?? ''),
-                ];
-                $products[] = $productData;
 
-                $this->messageBus->dispatch(new SaveToCsvMessage($productData, 'products_'. $iterationID));
+                try {
+                    $productData = [
+                        'title' => $this->productMapperHelper->titleFormat($titleNode->nodeValue),
+                        'price' => $this->productMapperHelper->priceFormat($prices->item($i)->nodeValue ?? '0'),
+                        'image_url' => $this->productMapperHelper
+                            ->imgUrlFormat($images->item($i)->getAttribute('src') ?? ''),
+                        'product_url' => $this->productMapperHelper
+                            ->productUrlFormat($links->item($i)->nodeValue ?? ''),
+                        'sku' => $this->productMapperHelper->skuFormat($skus->item($i)->nodeValue ?? ''),
+                    ];
+                    $products[] = $productData;
+
+                    $this->messageBus->dispatch(new SaveToCsvMessage($productData, 'products_' . $iterationID));
+                } catch (ClientExceptionInterface $e) {
+                    $io->error($e->getMessage());
+                    continue;
+                }
             }
-            $this->productService->saveProducts($products);
+            try {
+                $this->productService->saveProducts($products);
+                $io->success("Products found: " . count($products));
+            } catch (\Exception $e) {
+                $io->error($e->getMessage());
+                return Command::FAILURE;
+            }
         }
-
-        $io->success("Products found: " . count($products));
         return Command::SUCCESS;
     }
 }

@@ -20,12 +20,20 @@ class ProductService
 
     public function saveProducts(array $productsData): void
     {
+        $skus = array_column($productsData, 'sku');
+
+        $existingProducts = $this->productRepository->findBy(['sku' => $skus]);
+
+        $productsBySku = [];
+        foreach ($existingProducts as $product) {
+            $productsBySku[$product->getSku()] = $product;
+        }
+
         foreach ($productsData as $data) {
             $sku = $data['sku'];
 
-            $product = $this->productRepository->findOneBy(['sku' => $sku]);
-
-            if ($product) {
+            if (isset($productsBySku[$sku])) {
+                $product = $productsBySku[$sku];
                 $product->setTitle($data['title']);
                 $product->setPrice($data['price']);
                 $product->setImageUrl($data['image_url']);
